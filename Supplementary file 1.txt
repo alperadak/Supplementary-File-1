@@ -1,0 +1,160 @@
+
+rm(list=ls()) 
+
+setwd("set your directory in here")
+
+data <- read.csv("Dhot_Wide.csv", sep = "," , header = T)
+
+data <- data[,-c(2,3)]
+str(data)
+dim(data)
+
+############### Required Libraries ########################
+
+library(caret)
+library(glmnet)
+library(mlbench)
+library(psych)
+
+################## Data Partition #########################
+
+traits =1
+cycles =500
+accuracy_lm = matrix(nrow = cycles, ncol = traits)
+accuracy_ridge = matrix(nrow = cycles, ncol = traits)
+accuracy_lasso = matrix(nrow = cycles, ncol = traits)
+accuracy_en = matrix(nrow = cycles, ncol = traits)
+for (r in 1:cycles) 
+{
+  ind <- createDataPartition(data$DTA, p=0.6, list=FALSE)
+  train <- data[ind,]
+  test <- data[-ind,]
+  
+
+################### K-Fold cross validation ################
+
+custom <- trainControl(method= "repeatedcv",
+                       number=10,
+                       repeats = 10
+                       verboseIter = T)
+
+############################################################
+###################### Linear Regression ###################
+############################################################
+
+lm <- train(YIELD ~.,
+            train,
+            method= 'lm',
+            trControl= custom)
+
+summary(lm)
+
+plot(lm$finalModel)
+
+
+ predicted_test_lm <- predict(lm,test)
+ accuracy_lm[r,1] <- cor(predicted_test_lm , test$YIELD, use="complete")
+ cor(predicted_test_lm , test$YIELD, use="complete")
+  
+
+############################################################
+###################### Ridge Regression ####################
+############################################################
+
+ridge <- train(YIELD~.,
+               train,
+               method = 'glmnet',
+               tuneGrid= expand.grid(alpha=0,
+                                     lambda = seq(0.0001,1, length=5)),
+               trControl= custom)
+
+
+
+plot(ridge$finalModel, xvar = "lambda", label = T)
+plot(ridge$finalModel, xvar = "dev", label = T)
+
+plot(varImp(ridge,scale = F))
+plot(varImp(ridge,scale = T))
+
+
+  predicted_test_ridge <- predict(ridge,test)
+  accuracy_ridge[r,1] <- cor(predicted_test_ridge , test$YIELD, use="complete")
+  cor(predicted_test_ridge , test$YIELD, use="complete")
+  
+
+############################################################
+###################### Lasso Regression ####################
+############################################################
+
+lasso <- train(YIELD~.,
+               train,
+               method = 'glmnet',
+               tuneGrid= expand.grid(alpha=1,
+                                     lambda = seq(0.0001,1, length=5)),
+               trControl= custom)
+plot(lasso)
+plot(lasso$finalModel, xvar = "lambda", label = T)
+plot(lasso$finalModel, xvar = "dev", label = T)
+
+plot(varImp(lasso,scale = F))
+plot(varImp(lasso,scale = T))
+
+
+  predicted_test_lasso <- predict(lasso,test)
+  accuracy_lasso[r,1] <- cor(predicted_test_lasso , test$YIELD, use="complete")
+  cor(predicted_test_lasso , test$YIELD, use="complete")
+
+
+############################################################
+################### Elastic Net Regression #################
+############################################################
+
+set.seed(1234)
+
+en <- train(YIELD~.,
+            train,
+            method = 'glmnet',
+            tuneGrid= expand.grid(alpha=seq(0.1, length=10),
+                                  lambda = seq(0.0001,1, length=5)),
+            trControl= custom)
+
+plot(en)
+plot(en$finalModel, xvar = "lambda", label = T)
+plot(en$finalModel, xvar = "dev", label = T)
+
+plot(varImp(en,scale = F))
+plot(varImp(en,scale = T))
+
+ 
+  predicted_test_en <- predict(en,test)
+  accuracy_en[r,1] <- cor(predicted_test_en , test$YIELD, use="complete")
+  cor(predicted_test_en , test$YIELD, use="complete")
+  
+}
+
+################### Prediction accuraies of the models #####################
+
+summary(accuracy_lm)
+summary(accuracy_en)
+summary(accuracy_ridge)
+summary(accuracy_lasso)
+
+
+################# Compare the Models #####################
+
+model_list <- list(LinearModel = lm,
+                   Ridge= ridge,
+                   Lasso= lasso,
+                   ElasticNet= en)
+
+res <- resamples(model_list)
+summary(res)
+
+############# Best Tune for the Ridge, Elastic Net and Lasso regresisons  #################
+
+ridge$bestTune
+lasso$bestTune
+en$bestTune
+
+
+
